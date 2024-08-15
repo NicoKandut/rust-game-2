@@ -16,6 +16,8 @@ impl Renderer {
         let surface = api.create_surface(p_window);
         let queue = api.create_queue();
 
+        let (world_buffer, world_memory) = api.create_shader_storage_buffer();
+
         Self {
             api,
             surface,

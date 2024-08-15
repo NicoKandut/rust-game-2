@@ -58,6 +58,28 @@ impl VkRenderApi {
         (buffer, memory)
     }
 
+
+    pub fn create_shader_storage_buffer(&self) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_create_info = vk::BufferCreateInfo {
+            size: 1024,
+            usage: vk::BufferUsageFlags::STORAGE_BUFFER,
+            ..Default::default()
+        };
+
+        let buffer = unsafe {
+            self.device
+                .create_buffer(&buffer_create_info, None)
+                .unwrap()
+        };
+
+        let memory = self.allocate_memory_buffer(
+            buffer,
+            MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
+        );
+
+        (buffer, memory)
+    }
+
     // pub(crate) fn create_image(&self, width: u32, height: u32) -> (vk::Image, vk::DeviceMemory) {
     //     let create_info = ImageCreateInfo::builder()
     //         .image_type(ImageType::TYPE_2D)
