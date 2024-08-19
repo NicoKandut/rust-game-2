@@ -7,3 +7,5 @@ edition = "2021"
 render-api = { path = "../render-api" }
 ash = "0.38.0"
 glfw = { version = "0.58.0", features = ["vulkan"] }
+shader = { path = "../shader" }
+world = { path = "../world" }

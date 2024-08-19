@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::mem::size_of;
 
 use linalg::Vector3;
 
@@ -6,6 +7,7 @@ use crate::aabb::AABB;
 use crate::node::Node;
 use crate::octant::{get_octant_of_vector, get_octant_vector};
 
+#[derive(Debug)]
 pub struct Octree {
     root: usize,
     size: usize,
@@ -36,6 +38,13 @@ impl Octree {
         let max = &self.center + &half_size3;
 
         AABB::new(min, max)
+    }
+
+    pub fn size_in_bytes(&self) -> usize {
+        size_of::<usize>()
+            + size_of::<usize>()
+            + size_of::<Vector3>()
+            + size_of::<Node>() * self.nodes.len()
     }
 
     pub fn get_voxel(&self, pos: &Vector3) -> Option<&Node> {

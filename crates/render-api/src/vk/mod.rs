@@ -1,14 +1,81 @@
 use std::{ptr::null, sync::Arc};
+use std::ffi::CString;
 
-use ash::vk::{self, ImageLayout, InstanceCreateInfo, SampleCountFlags, SharingMode, SurfaceKHR};
-use ash::vk::{Extent3D, ImageCreateInfo, ImageTiling, ImageType};
-use vk::{ImageUsageFlags, MemoryPropertyFlags};
+use ash::vk::{self, Extent3D, ImageCreateInfo, ImageLayout, ImageTiling, ImageType, ImageUsageFlags, InstanceCreateInfo, Pipeline, SampleCountFlags, SharingMode, SurfaceKHR};
+use vk::{BufferUsageFlags, MemoryPropertyFlags};
 
 pub struct VkRenderApi {
     entry: Arc<ash::Entry>,
     instance: Arc<ash::Instance>,
     physical_device: Arc<vk::PhysicalDevice>,
     device: Arc<ash::Device>,
+}
+
+impl VkRenderApi {
+    fn create_descriptor_set_layout(&self) -> vk::DescriptorSetLayout {
+        let ssbo_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE);
+        let image = vk::DescriptorSetLayoutBinding::default()
+            .binding(1)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+            .stage_flags(vk::ShaderStageFlags::COMPUTE);
+        let bindings = [ssbo_binding, image];
+
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+
+        unsafe {
+            self.device
+                .create_descriptor_set_layout(&layout_info, None)
+                .unwrap()
+        }
+    }
+
+    pub fn create_compute_pipeline(&self, compute_shader_module: vk::ShaderModule) -> (vk::Pipeline, vk::PipelineLayout) {
+        let entry_point_name = CString::new("main").unwrap();
+        let vertex_shader_state_info = vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::COMPUTE)
+            .module(compute_shader_module)
+            .name(&entry_point_name);
+
+        let descriptor_set_layout = self.create_descriptor_set_layout();
+        let layout = {
+            let layouts = [descriptor_set_layout];
+            let layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts);
+            // .push_constant_range;
+
+            unsafe { self.device.create_pipeline_layout(&layout_info, None).unwrap() }
+        };
+
+        let pipeline_info = vk::ComputePipelineCreateInfo::default()
+            .stage(vertex_shader_state_info)
+            .layout(layout);
+        let pipeline_infos = [pipeline_info];
+
+        let pipeline = unsafe {
+            self.device
+                .create_compute_pipelines(vk::PipelineCache::null(), &pipeline_infos, None)
+                .unwrap()[0]
+        };
+
+        unsafe {
+            self.device.destroy_shader_module(compute_shader_module, None);
+        };
+
+        (pipeline, layout)
+    }
+
+    pub unsafe fn destroy_pipeline(&self, pipeline: Pipeline) {
+        self.device.destroy_pipeline(pipeline, None);
+    }
+
+    pub fn create_shader_module(&self, code: &[u32]) -> vk::ShaderModule {
+        let create_info = vk::ShaderModuleCreateInfo::default().code(code);
+        unsafe { self.device.create_shader_module(&create_info, None).unwrap() }
+    }
 }
 
 impl Default for VkRenderApi {
@@ -37,72 +104,64 @@ impl Drop for VkRenderApi {
 }
 
 impl VkRenderApi {
-    pub(crate) fn create_buffer(&self, usage: vk::BufferUsageFlags, size: u64) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_create_info = vk::BufferCreateInfo {
+    pub fn create_staging_buffer(&self, size: usize) -> (vk::Buffer, vk::DeviceMemory) {
+        self.create_buffer(
             size,
-            usage,
-            ..Default::default()
-        };
+            BufferUsageFlags::TRANSFER_SRC,
+            MemoryPropertyFlags::HOST_COHERENT | MemoryPropertyFlags::HOST_VISIBLE,
+        )
+    }
 
+    pub fn create_buffer(
+        &self,
+        size: usize,
+        usage: BufferUsageFlags,
+        properties: MemoryPropertyFlags,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let buffer_create_info = vk::BufferCreateInfo::default()
+            .size(size.into())
+            .usage(usage);
         let buffer = unsafe {
             self.device
                 .create_buffer(&buffer_create_info, None)
                 .unwrap()
         };
+        let memory = self.allocate_memory_buffer(buffer, properties);
 
-        let memory = self.allocate_memory_buffer(
-            buffer,
+        (buffer, memory)
+    }
+
+
+    pub fn create_shader_storage_buffer(&self, size: usize) -> (vk::Buffer, vk::DeviceMemory) {
+        self.create_buffer(
+            size,
+            BufferUsageFlags::STORAGE_BUFFER | BufferUsageFlags::TRANSFER_DST,
+            MemoryPropertyFlags::DEVICE_LOCAL,
+        )
+    }
+
+    pub fn create_image(&self, width: u32, height: u32) -> (vk::Image, vk::DeviceMemory) {
+        let create_info = ImageCreateInfo::default()
+            .image_type(ImageType::TYPE_2D)
+            .format(vk::Format::R8G8B8_UNORM)
+            .extent(Extent3D { width, height, depth: 1 })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(SampleCountFlags::TYPE_1)
+            .tiling(ImageTiling::OPTIMAL)
+            .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::SAMPLED)
+            .sharing_mode(SharingMode::EXCLUSIVE)
+            .initial_layout(ImageLayout::UNDEFINED);
+
+        let image = unsafe { self.device.create_image(&create_info, None).unwrap() };
+
+        let memory = self.allocate_memory_image(
+            image,
             MemoryPropertyFlags::DEVICE_LOCAL,
         );
 
-        (buffer, memory)
+        (image, memory)
     }
-
-
-    pub fn create_shader_storage_buffer(&self) -> (vk::Buffer, vk::DeviceMemory) {
-        let buffer_create_info = vk::BufferCreateInfo {
-            size: 1024,
-            usage: vk::BufferUsageFlags::STORAGE_BUFFER,
-            ..Default::default()
-        };
-
-        let buffer = unsafe {
-            self.device
-                .create_buffer(&buffer_create_info, None)
-                .unwrap()
-        };
-
-        let memory = self.allocate_memory_buffer(
-            buffer,
-            MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT,
-        );
-
-        (buffer, memory)
-    }
-
-    // pub(crate) fn create_image(&self, width: u32, height: u32) -> (vk::Image, vk::DeviceMemory) {
-    //     let create_info = ImageCreateInfo::builder()
-    //         .image_type(ImageType::TYPE_2D)
-    //         .format(vk::Format::R8G8B8_UNORM)
-    //         .extent(Extent3D { width, height, depth: 1 })
-    //         .mip_levels(1)
-    //         .array_layers(1)
-    //         .samples(SampleCountFlags::TYPE_1)
-    //         .tiling(ImageTiling::OPTIMAL)
-    //         .usage(ImageUsageFlags::STORAGE | ImageUsageFlags::SAMPLED)
-    //         .sharing_mode(SharingMode::EXCLUSIVE)
-    //         .initial_layout(ImageLayout::UNDEFINED)
-    //         .build();
-    //
-    //     let image = unsafe { self.device.create_image(&create_info, None).unwrap() };
-    //
-    //     let memory = self.allocate_memory_image(
-    //         image,
-    //         MemoryPropertyFlags::DEVICE_LOCAL,
-    //     );
-    //
-    //     (image, memory)
-    // }
 
     // pub(crate) fn copy_to_buffer(&self, buffer: vk::Buffer, data: &[u8]) {
     //     let buffer_size = data.len() as u64;
@@ -207,7 +266,6 @@ impl VkRenderApi {
         }
     }
 }
-
 
 
 fn load_entry() -> ash::Entry {

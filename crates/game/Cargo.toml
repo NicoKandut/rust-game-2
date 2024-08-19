@@ -8,3 +8,4 @@ linalg = { path = "../linalg" }
 window = { path = "../window" }
 engine = { path = "../engine" }
 renderer = { path = "../renderer" }
+world = { path = "../world"}
