@@ -1,7 +1,7 @@
-use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
 
 use crate::ops::{Dot, Norm};
-use crate::Vector2;
+use crate::{Normalize, Vector2};
 
 impl Add for &Vector2 {
     type Output = Vector2;
@@ -40,24 +40,43 @@ impl SubAssign for Vector2 {
 }
 
 impl Dot for Vector2 {
-    fn dot(self, rhs: Self) -> f64 {
+    fn dot(self, rhs: Self) -> f32 {
         self.0[0] * rhs.0[0] + self.0[1] * rhs.0[1]
     }
 }
 
 impl Norm for Vector2 {
-    fn norm2(&self) -> f64 {
+    fn norm2(&self) -> f32 {
         self.0[0].powi(2) + self.0[1].powi(2)
     }
 }
 
-impl Mul<f64> for &Vector2 {
+impl Mul<f32> for &Vector2 {
     type Output = Vector2;
 
-    fn mul(self, rhs: f64) -> Self::Output {
+    fn mul(self, rhs: f32) -> Self::Output {
         Vector2([
             self.0[0] * rhs,
             self.0[1] * rhs,
         ])
+    }
+}
+
+impl Normalize for Vector2 {
+    type Output = Vector2;
+    fn normalize(self) -> Self::Output {
+        let norm = self.norm();
+        Vector2([
+            self.0[0] / norm,
+            self.0[1] / norm,
+        ])
+    }
+}
+
+impl Neg for &Vector2 {
+    type Output = Vector2;
+
+    fn neg(self) -> Self::Output {
+        Vector2([-self.0[0], -self.0[1]])
     }
 }

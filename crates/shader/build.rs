@@ -16,6 +16,8 @@ fn main() {
 
     println!("Recompiling shaders...");
 
+    fs::create_dir_all(spv_dir.clone()).unwrap();
+
     for entry in fs::read_dir(shader_dir.clone()).unwrap() {
         let input_file = entry.unwrap().file_name();
         let input_path = shader_dir.clone() + "\\" + input_file.to_str().unwrap();

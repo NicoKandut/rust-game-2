@@ -1,5 +1,5 @@
 [package]
-name = "renderer"
+name = "farm_renderer"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,3 +9,7 @@ ash = "0.38.0"
 glfw = { version = "0.58.0", features = ["vulkan"] }
 shader = { path = "../shader" }
 world = { path = "../world" }
+rand = "0.9.0-alpha.2"
+image = "0.25.2"
+images = { path = "../images" }
+linalg = { path = "../linalg" }

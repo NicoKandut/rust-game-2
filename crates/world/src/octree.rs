@@ -32,10 +32,10 @@ impl Default for Octree {
 
 impl Octree {
     pub fn get_aabb(&self) -> AABB {
-        let half_size = (self.size as f64) / 2.0;
+        let half_size = (self.size as f32) / 2.0;
         let half_size3 = Vector3::new(half_size, half_size, half_size);
-        let min = &self.center - &half_size3;
-        let max = &self.center + &half_size3;
+        let min = self.center - half_size3;
+        let max = self.center + half_size3;
 
         AABB::new(min, max)
     }
@@ -47,7 +47,7 @@ impl Octree {
             + size_of::<Node>() * self.nodes.len()
     }
 
-    pub fn get_voxel(&self, pos: &Vector3) -> Option<&Node> {
+    pub fn get_voxel(&self, pos: Vector3) -> Option<&Node> {
         let aabb = self.get_aabb();
 
         if !aabb.contains(pos) {
@@ -58,7 +58,7 @@ impl Octree {
         let mut node = &self.nodes[&self.root];
 
         while !node.is_leaf {
-            let octant = get_octant_of_vector(&(pos - &self.center));
+            let octant = get_octant_of_vector(pos - self.center);
             if let Some(children) = node.children {
                 node = &self.nodes[&children[octant]];
             } else {
@@ -69,7 +69,7 @@ impl Octree {
         Some(node)
     }
 
-    pub fn get_voxel_mut(&mut self, pos: &Vector3) -> Option<&mut Node> {
+    pub fn get_voxel_mut(&mut self, pos: Vector3) -> Option<&mut Node> {
         let aabb = self.get_aabb();
 
         if !aabb.contains(pos) {
@@ -80,7 +80,7 @@ impl Octree {
         let mut node = &self.nodes[&index];
 
         while !node.is_leaf {
-            let octant = get_octant_of_vector(&(pos - &self.center));
+            let octant = get_octant_of_vector(pos - self.center);
 
             if let Some(children) = node.children {
                 index = children[octant];
@@ -96,7 +96,7 @@ impl Octree {
         let mut children = self.nodes[&self.root].children;
 
         if let Some(children) = children {
-            self.center = &self.center + &(&get_octant_vector(octant) * ((self.size as f64) / 4.0));
+            self.center = self.center + get_octant_vector(octant) * ((self.size as f32) / 4.0);
             self.size /= 2;
 
             for index in children {
@@ -129,7 +129,7 @@ impl Octree {
 
         self.root = new_root_id;
         self.nodes.insert(new_root_id, new_root);
-        self.center = &self.center - &(&get_octant_vector(octant) * ((self.size as f64) / 2.0));
+        self.center = self.center - get_octant_vector(octant) * ((self.size as f32) / 2.0);
         self.size *= 2;
     }
 }

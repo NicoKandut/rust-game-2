@@ -7,7 +7,7 @@ pub fn get_octant_vector(octant: usize) -> Vector3 {
     Vector3::new(x, y, z)
 }
 
-pub fn get_octant_of_vector(vector: &Vector3) -> usize {
+pub fn get_octant_of_vector(vector: Vector3) -> usize {
     let x = if vector.x() >= 0.0 { 1 } else { 0 };
     let y = if vector.y() >= 0.0 { 1 } else { 0 };
     let z = if vector.z() >= 0.0 { 1 } else { 0 };

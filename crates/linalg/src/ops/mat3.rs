@@ -1,5 +1,15 @@
+use crate::{Identity, Matrix3};
 use std::ops::{Add, AddAssign, Mul, Sub, SubAssign};
-use crate::Matrix3;
+
+impl Identity for Matrix3 {
+    fn identity() -> Matrix3 {
+        Matrix3([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ])
+    }
+}
 
 impl Add for &Matrix3 {
     type Output = Matrix3;
