@@ -1,11 +1,11 @@
 use ash::vk;
 use ash::vk::Format;
-use crate::vk::VkRenderApi;
+use crate::vk::{VkRenderApi, COLOR_FORMAT};
 
 impl VkRenderApi {
     pub fn create_render_pass(&self) -> vk::RenderPass {
         let color_attachment = vk::AttachmentDescription::default()
-            .format(Format::B8G8R8A8_SRGB)
+            .format(COLOR_FORMAT)
             .samples(vk::SampleCountFlags::TYPE_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)

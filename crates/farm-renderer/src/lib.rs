@@ -1,17 +1,19 @@
 mod uniform_buffer_object;
+mod meshing;
 
+use crate::meshing::mesh_ground;
 use ash::vk;
 use ash::vk::{DescriptorSetLayout, Framebuffer, ImageView, Pipeline, PipelineLayout, Queue, QueueFlags, ShaderModule, SurfaceKHR, SwapchainKHR};
 use core::slice::from_raw_parts;
+use farm_core::ground::Ground;
 use glfw::PWindow;
 use image::DynamicImage;
-use linalg::{Identity, Matrix4, Vector3};
+use linalg::{Identity, Matrix4, Vector3, Vector4};
 use rand::Rng;
 use render_api::vk::VkRenderApi;
 use shader::{get_farm_fragment_shader, get_farm_vertex_shader};
 use uniform_buffer_object::UniformBufferObject;
 use vk::RenderPass;
-use world::world::World;
 
 pub struct Renderer {
     api: VkRenderApi,
@@ -56,7 +58,7 @@ pub struct Renderer {
     render_finished_semaphores: Vec<vk::Semaphore>,
     in_flight_fences: Vec<vk::Fence>,
     frame_index: usize,
-    quad_vertices: Vec<Vector3>,
+    quad_vertices: Vec<Vector4>,
     quad_indices: Vec<u32>,
     world_changed: bool,
     texture_changed: bool,
@@ -65,6 +67,8 @@ pub struct Renderer {
     descriptor_sets: Vec<vk::DescriptorSet>,
 
     uniform_buffer_object: UniformBufferObject,
+    need_bigger_vertex_buffer: bool,
+    need_bigger_index_buffer: bool,
 }
 
 impl Renderer {
@@ -81,33 +85,54 @@ impl Renderer {
 
         let mut rng = rand::thread_rng();
 
+        // let (models, _) = tobj::load_obj("screw.obj", &tobj::LoadOptions::default()).unwrap();
+
+        let mut quad_vertices = Vec::<Vector4>::with_capacity(100);
+        let mut quad_indices = Vec::<u32>::with_capacity(3 * 100);
+        //
+        // for model in models.iter() {
+        //     model.mesh.positions.chunks(3).for_each(|v| {
+        //         let v = Vector3::new(v[0], v[1], v[2]);
+        //         quad_vertices.push(v);
+        //     });
+        //
+        //     model.mesh.indices.iter().for_each(|i| {
+        //         quad_indices.push(*i);
+        //     });
+        // }
+
+        // Vertices of a cube centered at the origin
         let cube_vertices = vec![
-            Vector3::new(1.0, 1.0, 0.0),
-            Vector3::new(-1.0, -1.0, 0.0),
-            Vector3::new(1.0, -1.0, 0.0),
-            Vector3::new(-1.0, 1.0, 0.0),
+            Vector4::new(-1.0, -1.0, -1.0, 0.0), // 0
+            Vector4::new(1.0, -1.0, -1.0, 1.0), // 1
+            Vector4::new(1.0, 1.0, -1.0, 2.0), // 2
+            Vector4::new(-1.0, 1.0, -1.0, 3.0), // 3
+            Vector4::new(-1.0, -1.0, 1.0, 4.0), // 4
+            Vector4::new(1.0, -1.0, 1.0, 5.0), // 5
+            Vector4::new(1.0, 1.0, 1.0, 6.0), // 6
+            Vector4::new(-1.0, 1.0, 1.0, 7.0), // 7
         ];
+        // Indices for the 12 triangles (2 per face) using clockwise winding order
         let cube_indices = vec![
+            // Front face
             0, 1, 2,
-            2, 1, 0,
-            1, 2, 3,
-            3, 2, 1,
+            2, 3, 0,
+            // Back face
+            5, 4, 7,
+            7, 6, 5,
+            // Left face
+            4, 0, 3,
+            3, 7, 4,
+            // Right face
+            1, 5, 6,
+            6, 2, 1,
+            // Top face
+            3, 2, 6,
+            6, 7, 3,
+            // Bottom face
+            4, 5, 1,
+            1, 0, 4,
         ];
-
-        let mut quad_vertices = Vec::<Vector3>::with_capacity(1000);
-        let mut quad_indices = Vec::<u32>::with_capacity(3 * 1000);
-
-        // // RNG
-        // for _ in 0..quad_vertices.capacity() {
-        //     quad_vertices.push(Vector3::new(
-        //         rng.gen_range(-1.0..1.0),
-        //         rng.gen_range(-1.0..1.0),
-        //         rng.gen_range(-1.0..1.0)
-        //     ));
-        // }
-        // for _ in 0..quad_indices.capacity() {
-        //     quad_indices.push(rng.gen_range(0..quad_vertices.len() as u32));
-        // }
 
         // CUBE
         for v in cube_vertices {
@@ -117,13 +142,25 @@ impl Renderer {
             quad_indices.push(i);
         }
 
-        let quad_vertex_buffer_size = quad_vertices.len() * 2 * size_of::<f32>();
+        // // RNG
+        // for _ in 0..quad_vertices.capacity() {
+        //     quad_vertices.push(Vector3::new(
+        //         rng.gen_range(-1.0..1.0),
+        //         rng.gen_range(-1.0..1.0),
+        //         rng.gen_range(-1.0..1.0),
+        //     ));
+        // }
+        // for _ in 0..quad_indices.capacity() {
+        //     quad_indices.push(rng.gen_range(0..quad_vertices.len() as u32));
+        // }
+
+        let quad_vertex_buffer_size = quad_vertices.len() * size_of::<Vector4>();
         let (quad_vertex_buffer, quad_vertex_memory) = api.create_vertex_buffer(quad_vertex_buffer_size);
 
         let quad_index_buffer_size = quad_indices.len() * size_of::<u32>();
         let (quad_index_buffer, quad_index_memory) = api.create_index_buffer(quad_index_buffer_size);
 
-        let texture = images::field_empty();
+        let texture = images::palette();
         let (texture_image_buffer, texture_image_memory) = api.create_texture_image(texture.width(), texture.height());
         let texture_image_view = api.create_image_view(texture_image_buffer);
         let texture_sampler = api.create_sampler();
@@ -156,6 +193,9 @@ impl Renderer {
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER)
                 .descriptor_count(2),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(2),
         ];
 
         let descriptor_pool = api.create_descriptor_pool(&pool_sizes);
@@ -165,7 +205,12 @@ impl Renderer {
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .descriptor_count(1)
-                .stage_flags(vk::ShaderStageFlags::VERTEX)
+                .stage_flags(vk::ShaderStageFlags::VERTEX),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT)
         ];
         let descriptor_set_layout = api.create_descriptor_set_layout(&bindings);
         let descriptor_set_layouts = [descriptor_set_layout, descriptor_set_layout];
@@ -178,13 +223,26 @@ impl Renderer {
                 .offset(0)
                 .range(size_of::<UniformBufferObject>() as u64);
             let buffer_info = [descriptor_buffer_info];
-            let descriptor_write = vk::WriteDescriptorSet::default()
+            let descriptor_write_uniform = vk::WriteDescriptorSet::default()
                 .dst_set(descriptor_sets[i])
                 .dst_binding(0)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                 .buffer_info(&buffer_info);
-            api.update_descriptor_sets(&[descriptor_write]);
+
+            let descriptor_image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(texture_image_view)
+                .sampler(texture_sampler);
+            let image_info = &[descriptor_image_info];
+            let descriptor_write_sampler = vk::WriteDescriptorSet::default()
+                .dst_set(descriptor_sets[i])
+                .dst_binding(1)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(image_info);
+
+            api.update_descriptor_sets(&[descriptor_write_uniform, descriptor_write_sampler]);
         }
 
         let (pipeline, pipeline_layout, _) = api.create_graphics_pipeline(vertex_shader_module, fragment_shader_module, render_pass, descriptor_set_layout);
@@ -197,9 +255,9 @@ impl Renderer {
         let in_flight_fences = vec![api.create_fence(vk::FenceCreateFlags::SIGNALED), api.create_fence(vk::FenceCreateFlags::SIGNALED)];
 
         let mut uniform_buffer_object = UniformBufferObject::default();
-        // uniform_buffer_object.proj = Matrix4::perspective(45.0, width as f32 / height as f32, 0.1, 100.0);
+        uniform_buffer_object.proj = Matrix4::perspective(45.0, width as f32 / height as f32, 0.1, 100.0);
 
-        uniform_buffer_object.proj = Matrix4::identity();
+        // uniform_buffer_object.proj = Matrix4::identity();
 
 
         Self {
@@ -248,6 +306,8 @@ impl Renderer {
             uniform_memories,
             descriptor_sets,
             uniform_buffer_object,
+            need_bigger_vertex_buffer: false,
+            need_bigger_index_buffer: false
         }
     }
 
@@ -255,7 +315,20 @@ impl Renderer {
         self.uniform_buffer_object.view = view_matrix;
     }
 
-    pub fn update_world(&mut self, world: &World) {
+    pub fn update_world(&mut self, ground: &Ground) {
+        let ground_mesh = mesh_ground(ground);
+
+        if (ground_mesh.vertices.len() > self.quad_vertices.len()) {
+            self.need_bigger_vertex_buffer = true;
+        }
+
+        if (ground_mesh.indices.len() > self.quad_indices.len()) {
+            self.need_bigger_index_buffer = true;
+        }
+
+        // randomize
+        self.quad_vertices = ground_mesh.vertices;
+        self.quad_indices = ground_mesh.indices;
         self.world_changed = true;
     }
 
@@ -283,9 +356,6 @@ impl Renderer {
     }
 
     pub fn draw_frame(&mut self) {
-        // determine next frame index
-
-
         // get frame resources
         let in_flight_fence = self.in_flight_fences[self.frame_index];
         let image_available_semaphore = self.image_available_semaphores[self.frame_index];
@@ -303,7 +373,25 @@ impl Renderer {
         self.api.reset_command_buffer(command_buffer);
         self.api.begin_command_buffer(command_buffer, vk::CommandBufferUsageFlags::default());
 
-        let staging_resources = if (self.world_changed) {
+        if(self.need_bigger_vertex_buffer) {
+            self.api.free_memory(self.vertex_memory);
+            self.api.destroy_buffer(self.vertex_buffer);
+            let (quad_vertex_buffer, quad_vertex_memory) = self.api.create_vertex_buffer(self.quad_vertices.len() * size_of::<Vector4>());
+            self.vertex_buffer = quad_vertex_buffer;
+            self.vertex_memory = quad_vertex_memory;
+            self.need_bigger_vertex_buffer = false;
+        }
+
+        if(self.need_bigger_index_buffer) {
+            self.api.free_memory(self.index_memory);
+            self.api.destroy_buffer(self.index_buffer);
+            let (quad_index_buffer, quad_index_memory) = self.api.create_index_buffer(self.quad_indices.len() * size_of::<u32>());
+            self.index_buffer = quad_index_buffer;
+            self.index_memory = quad_index_memory;
+            self.need_bigger_index_buffer = false;
+        }
+
+        let staging_resources = if (self.world_changed && self.quad_indices.len() > 0) {
             let vertex_bytes = to_byte_slice(&self.quad_vertices);
             let (vertex_staging_buffer, vertex_staging_memory) = self.api.create_staging_buffer(vertex_bytes.len());
             self.api.copy_to_device_memory(vertex_bytes, vertex_staging_memory);
@@ -314,12 +402,9 @@ impl Renderer {
             self.api.copy_to_device_memory(index_bytes, index_staging_memory);
             self.api.cmd_copy_buffer(index_staging_buffer, self.index_buffer, index_bytes.len(), command_buffer);
 
-            Some((
-                vec![vertex_staging_buffer, index_staging_buffer],
-                vec![vertex_staging_memory, index_staging_memory]
-            ))
+            (vec![vertex_staging_buffer, index_staging_buffer], vec![vertex_staging_memory, index_staging_memory])
         } else {
-            None
+            (vec![], vec![])
         };
 
         let uniform_bytes = to_bytes(&self.uniform_buffer_object);
@@ -335,13 +420,13 @@ impl Renderer {
         self.api.submit_command_buffer(self.graphics_queue, command_buffer, image_available_semaphore, render_finished_semaphore, in_flight_fence);
         self.api.present_frame(self.present_queue, self.swapchain, self.frame_index, render_finished_semaphore);
 
-        if let Some((staging_buffer, staging_memory)) = staging_resources {
-            for memory in staging_memory {
-                self.api.free_memory(memory);
-            }
-            for buffer in staging_buffer {
-                self.api.destroy_buffer(buffer);
-            }
+        let (staging_buffer, staging_memory) = staging_resources;
+
+        for memory in staging_memory {
+            self.api.free_memory(memory);
+        }
+        for buffer in staging_buffer {
+            self.api.destroy_buffer(buffer);
         }
 
         self.world_changed = false;
@@ -402,7 +487,8 @@ fn to_byte_slice<T: Sized>(slice: &[T]) -> &[u8] {
     unsafe {
         let pointer = slice.as_ptr() as *const u8;
         let size = slice.len() * size_of::<T>();
-        from_raw_parts(pointer, size)
+        let (_,bytes, _) = from_raw_parts(pointer, size).align_to::<u8>();
+        bytes
     }
 }
 
@@ -410,6 +496,7 @@ fn to_bytes<T: Sized>(value: &T) -> &[u8] {
     unsafe {
         let pointer = value as *const T as *const u8;
         let size = size_of::<T>();
-        from_raw_parts(pointer, size)
+        let (_,bytes, _) = from_raw_parts(pointer, size).align_to::<u8>();
+        bytes
     }
 }

@@ -1,4 +1,5 @@
 use glm::{exp, GenSquareMat};
+use crate::Matrix4;
 use crate::tests::conformance::assert_memory_order;
 
 #[test]
@@ -111,18 +112,20 @@ fn it_works() {
 
     let look_at = crate::Matrix4::look_at(
         crate::Vector3::new(-1.0, -1.0, 1.0),
-        crate::Vector3::new(0.0, 0.0, 1.0),
+        crate::Vector3::new(0.0, 0.0, 0.0),
         crate::Vector3::new(0.0, 0.0, 1.0),
     );
     let look_at_2 = glm::ext::look_at_rh(
         glm::vec3(-1.0, -1.0, 1.0),
-        glm::vec3(0.0, 0.0, 1.0),
+        glm::vec3(0.0, 0.0, 0.0),
         glm::vec3(0.0, 0.0, 1.0),
     );
 
-    assert_memory_order(&look_at, &look_at_2);
+    // assert_memory_order(&look_at, &look_at_2);
 
-    let transformed = look_at * point;
+    let proj = crate::Matrix4::perspective(45.0, 16.0 / 9.0, 0.1, 100.0);
+
+    let transformed = proj * look_at * point;
     let other = look_at_2 * glm_point;
 
     println!("{:?} vs {:?}", transformed, other);

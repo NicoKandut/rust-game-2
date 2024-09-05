@@ -40,10 +40,10 @@ impl Matrix4 {
         let u = r.cross(f); // shaky but not much room for error
 
         Self::from_columns(
-            [r.x(), u.x(), f.x(), 0.0],
-            [r.y(), u.y(), f.y(), 0.0],
-            [r.z(), u.z(), f.z(), 0.0],
-            [-r.dot(position), -u.dot(position), -f.dot(position), 1.0],
+            [r.x(), u.x(), -f.x(), 0.0],
+            [r.y(), u.y(), -f.y(), 0.0],
+            [r.z(), u.z(), -f.z(), 0.0],
+            [-r.dot(position), -u.dot(position), f.dot(position), 1.0],
         )
     }
 

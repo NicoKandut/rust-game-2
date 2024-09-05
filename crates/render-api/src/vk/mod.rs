@@ -88,6 +88,9 @@ impl Drop for VkRenderApi {
     }
 }
 
+const COLOR_FORMAT: Format = Format::B8G8R8A8_SRGB;
+const COLOR_SPACE: ColorSpaceKHR = ColorSpaceKHR::SRGB_NONLINEAR;
+
 impl VkRenderApi {
     pub fn acquire_next_image(&self, swapchain: SwapchainKHR, timeout: u64, semaphore: Semaphore, fence: Fence) -> u32 {
         let (image_index, _) = unsafe {
@@ -420,13 +423,13 @@ impl VkRenderApi {
     pub fn get_vertex_input_description() -> (vk::VertexInputBindingDescription, vk::VertexInputAttributeDescription) {
         let binding = vk::VertexInputBindingDescription::default()
             .binding(0)
-            .stride(size_of::<f32>() as u32 * 3)
+            .stride(size_of::<f32>() as u32 * 4)
             .input_rate(VertexInputRate::VERTEX);
 
         let attribute = vk::VertexInputAttributeDescription::default()
             .binding(0)
             .location(0)
-            .format(Format::R32G32B32_SFLOAT)
+            .format(Format::R32G32B32A32_SFLOAT)
             .offset(0);
 
         (binding, attribute)
@@ -440,8 +443,8 @@ impl VkRenderApi {
         };
         assert!(!formats.is_empty(), "No surface formats available!");
 
-        let preferred_format = Format::B8G8R8A8_SRGB;
-        let preferred_color_space = ColorSpaceKHR::SRGB_NONLINEAR;
+        let preferred_format = COLOR_FORMAT;
+        let preferred_color_space = COLOR_SPACE;
 
         for format in formats.iter() {
             if format.format == preferred_format && format.color_space == preferred_color_space {

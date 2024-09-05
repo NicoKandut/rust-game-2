@@ -1,6 +1,6 @@
 use ash::vk;
 use ash::vk::{ComponentSwizzle, Format, Image, ImageView};
-use crate::vk::VkRenderApi;
+use crate::vk::{VkRenderApi, COLOR_FORMAT};
 
 /// Image Views
 impl VkRenderApi {
@@ -23,7 +23,7 @@ impl VkRenderApi {
         let create_info = vk::ImageViewCreateInfo::default()
             .image(image)
             .view_type(vk::ImageViewType::TYPE_2D)
-            .format(Format::B8G8R8A8_SRGB)
+            .format(COLOR_FORMAT)
             .components(component_mapping)
             .subresource_range(vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,

@@ -1,11 +1,11 @@
 use ash::vk;
-use crate::vk::VkRenderApi;
+use crate::vk::{VkRenderApi, COLOR_FORMAT};
 
 impl VkRenderApi {
     pub fn create_image(&self, width: u32, height: u32, usage: vk::ImageUsageFlags) -> (vk::Image, vk::DeviceMemory) {
         let create_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
-            .format(vk::Format::B8G8R8A8_SRGB)
+            .format(COLOR_FORMAT)
             .extent(vk::Extent3D { width, height, depth: 1 })
             .mip_levels(1)
             .array_layers(1)
